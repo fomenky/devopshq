@@ -1,0 +1,35 @@
+[
+  {
+    "ParameterKey": "CostCentre",
+    "ParameterValue": "000000-00000-0000-0000000"
+  },
+  {
+    "ParameterKey": "AppEnvironment",
+    "ParameterValue": "Shared"
+  },
+  {
+    "ParameterKey": "InfraEnvironment",
+    "ParameterValue": "Staging"
+  },
+  {
+    "ParameterKey": "Owner",
+    "ParameterValue": "devops@smartvault.com"
+  },
+  {
+    "ParameterKey": "Project",
+    "ParameterValue": "SmartVault"
+  },
+  {
+    "ParameterKey": "ServiceNameLong",
+    "ParameterValue": "SmartVault"
+  },
+  {
+    "ParameterKey": "StateLockTableName",
+    "ParameterValue": "smartvault-stg-terraform-states"
+  },
+  {
+    "ParameterKey": "StateStorageBucketName",
+    "ParameterValue": "smartvault-stg-terraform-states"
+  }
+]
+

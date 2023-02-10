@@ -1,0 +1,72 @@
+#!/usr/bin/groovy
+
+pipeline {
+
+    agent any
+
+    options {
+        disableConcurrentBuilds()
+    }
+
+    stages {
+        stage("Deploy Windows Updates - Staging"){
+            steps { 
+                deployWindowsUpdates('stg') 
+            }
+        }
+        stage("Run Prepare Rollout for Staging"){
+            steps { prepareRollout('stg', 'us-east-2', '18.191.125.125') }
+        }
+        stage("Send Slack Nofication") {
+            steps {
+                slackSend channel: 'sv-alerts-production', 
+                color: 'good', 
+                message: 'Approve Rollout of Windows Updates to Production Within the Next 2 Hours. http://jenkins.int.smartvault.com/blue/organizations/jenkins/windows-updates-pipeline', 
+                teamDomain: 'getbusyhq', 
+                tokenCredentialId: 'jenkins-slack-integration'
+            }
+        }
+        stage("Approve"){
+            steps { approve() }
+        }
+        stage("Deploy Windows Updates - Production"){
+            steps { deployWindowsUpdates('prd') }
+        }
+        stage("Run Prepare Rollout for Production"){
+            steps { prepareRollout('prd', 'us-east-2', '10.49.11.93') }
+        }
+    }
+
+}
+
+// steps
+def deployWindowsUpdates(envId) {
+    
+    // deploy windows updates using with packer and ansible
+    if ("${envId}" != 'stg' || "${envId}" != 'prd'){
+        sh "packer build --var ssh_private_key_file=\$SSH_PRIV_KEY_FILE_${envId} --var-file=/mnt/config/packer/${envId}/core-web.json \$PACKER_FILE | tee web-output.log"
+        sh "packer build --var ssh_private_key_file=\$SSH_PRIV_KEY_FILE_${envId} --var-file=/mnt/config/packer/${envId}/core-app.json \$PACKER_FILE | tee app-output.log"
+        sh "packer build --var ssh_private_key_file=\$SSH_PRIV_KEY_FILE_${envId} --var-file=/mnt/config/packer/${envId}/core-post.json \$PACKER_FILE | tee post-output.log"
+    } else {
+        println "Environment ${envId} is not valid"
+        System.exit(0)
+    }
+}
+
+def approve() {
+	timeout(time:2, unit:'HOURS'){
+        input('Rollout Windows Updates to Production?')
+    }
+}
+
+def prepareRollout(envId, region, ip) {
+
+	withCredentials([usernamePassword(credentialsId: 'jenkins-teamcity-access', passwordVariable: 'TCPASS', usernameVariable: 'TCUSER')]) {
+        // the code in here can access $tcpass and $tcuser
+        if ("${envId}" != 'stg'){ 
+            sh "scripts/prepareRollout.sh -u ${TCUSER} -p ${TCPASS} -i ${ip} -e ${envId} -r ${region}"
+        } else if ("${envId}" != 'prd'){ 
+            sh "scripts/prepareRollout.sh -u ${TCUSER} -p ${TCPASS} -i ${ip} -e ${envId} -r ${region}"
+        }
+    }
+}

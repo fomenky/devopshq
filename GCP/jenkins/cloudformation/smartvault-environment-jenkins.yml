@@ -1,0 +1,398 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  AWS CloudFormation template to create an ALB + jenkins server
+Metadata:
+  Owner:
+    Description: Acheanyi F. Fomenky
+Parameters:
+  Owner:
+    Description: The key contact / stack holder of this stack
+    Type: String
+    Default: acheanyi.fomenky@smartvault.com
+  EnvId:
+    Description: The name of the EnvId
+    Type: String
+    ConstraintDescription: Must be a string.
+  InstanceId:
+    Type: String
+    Description: Specifies the AMI ID, using newest linux for us-east-2
+    Default: ami-02ccb28830b645a41
+  InstanceType:
+    Type: String
+    Description: >
+      Specifies the EC2 instance type for jenkins, which is memory intensive usually
+      Defaults to t3.small
+    Default: t3.small
+    ConstraintDescription: must be a valid EC2 instance type.
+  KeyName:
+    Type: String
+    Description: >
+      Optional - Specifies the name of an existing Amazon EC2 key pair
+      to enable SSH access to the EC2 instances in the cluster.
+    Default: smartvault-production-us-east-2
+  BucketPrefix:
+    Type: String
+    Description: Name of s3 Backup bucket to load jenkins content
+    Default: smartvault-s3-jenkins
+  OpenVPNUser:
+    Type: String
+    Description: Name of the main openvpn user
+    Default: acheanyi.fomenky
+  OpenVPNPassword:
+    Type: String
+    Description: Password associated with the main openvpn user
+    NoEcho: true
+  TrustingAccountId:
+    Description: The account to which you want to grant delegated access
+    Type: String
+    Default: 450560603497
+
+Mappings:
+  "507859590531":
+    all-regions:
+      Domain: "int.dev.smartvault.com"
+  "450560603497":
+    all-regions:
+      Domain: "int.stg.smartvault.com"
+  "587105464662":
+    all-regions:
+      Domain: "int.smartvault.com"
+Conditions:
+  IsDevelopment: !Equals 
+    - !Ref AWS::AccountId
+    - '507859590531'
+  IsStaging: !Equals 
+    - !Ref AWS::AccountId
+    - '450560603497'
+  IsProduction: !Equals 
+    - !Ref AWS::AccountId
+    - '587105464662'
+Resources:
+  ## Master Node ##
+  Jenkins:
+    Type: AWS::EC2::Instance
+    Condition: IsProduction
+    Metadata:
+      AWS::CloudFormation::Init:
+        configSets:
+          jenkins_install:
+            - setup_jenkins
+            - install_openvpn
+            - configure_openvpn
+            - finalise
+        setup_jenkins:
+          packages:
+            yum:
+              tmux: []
+              docker: []
+          services:
+            sysvinit:
+              docker:
+                enabled: 'true'
+                ensureRunning: 'true'
+          files:
+            /tmp/backup.txt:
+              content: !Sub |
+                */15 * * * * aws s3 sync /var/jenkins_home s3://${BucketPrefix}-${AWS::AccountId}
+                */5 * * * * chmod 666 /var/run/docker.sock
+              mode: "000644"
+              owner: "root"
+              group: "root"
+          commands:
+            01_install_docker:
+              command: yum install -y docker
+            02_make_jenkins_dir:
+              command: mkdir /var/jenkins_home
+            03_chown_jenkins:
+              command: chown 1000:1000 /var/jenkins_home
+            04_config_docker:
+              command: usermod -a -G docker ec2-user
+            05_start_docker:
+              command: service docker start
+            06_update_permissions:
+              command: chmod 666 /var/run/docker.sock
+            07_docker_pull:
+              command: !Sub aws ecr get-login --region ${AWS::Region} --no-include-email | sh ; docker pull ${AWS::AccountId}.dkr.ecr.us-east-2.amazonaws.com/smartvault.devops.jenkins:latest
+            08_start_jenkins:
+              command: !Sub docker run -t -d -v /var/jenkins_home:/var/jenkins_home:z -v /var/run/docker.sock:/var/run/docker.sock -v $(which docker):$(which docker) -p 80:8080 --name jenkins-master --restart=always ${AWS::AccountId}.dkr.ecr.us-east-2.amazonaws.com/smartvault.devops.jenkins:latest
+              test: docker ps -a | grep -v jenkins
+            09_backup_jenkins:
+              command: cat /tmp/backup.txt | crontab -
+              test: crontab -l
+        install_openvpn:
+          commands:
+            01_install_amazon-linux-extras:
+              command:  amazon-linux-extras enable epel
+            02_install_openvpn:
+              command:  yum install -y epel-release; yum install -y openvpn easy-rsa
+        configure_openvpn:
+          files:
+            /etc/openvpn/credentials:
+              content: !Sub |
+                ${OpenVPNUser}
+                ${OpenVPNPassword}
+              mode: "000644"
+              owner: "root"
+              group: "root"
+          commands:    
+            01_pull_s3_configuration: 
+              command: !Sub aws s3 cp s3://smartvault-s3-access-${TrustingAccountId}/openvpn/smartvault-ec2-openvpn-us-east-2-${TrustingAccountId}/ /etc/openvpn/. --recursive
+            02_openvpn_start: 
+              command: systemctl enable openvpn@client.service; systemctl start openvpn@client.service
+        finalise:
+          commands:
+            1-signal-success:
+              command: !Join 
+                - ''
+                - - /opt/aws/bin/cfn-signal -e 0
+                  - ' --stack "'
+                  - !Ref 'AWS::StackName'
+                  - '"'
+                  - ' --resource Jenkins'
+                  - ' --region '
+                  - !Ref 'AWS::Region'
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub smartvault-${EnvId}-ec2-jenkins
+      SubnetId: !ImportValue 
+          'Fn::Sub': 'smartvault-${AWS::Region}-subnet-privateapp1'
+      ImageId: !Ref InstanceId
+      InstanceType: !Ref InstanceType
+      IamInstanceProfile: !Ref InstanceProfile
+      SecurityGroupIds:
+        - !GetAtt JenkinsServerAccessSecurityGroup.GroupId
+      KeyName: !Ref KeyName
+      UserData: !Base64
+        Fn::Join:
+          - ''
+          - - |
+              #!/bin/bash -xe
+            - |
+            - '/opt/aws/bin/cfn-init -v '
+            - '         --stack '
+            - !Ref 'AWS::StackName'
+            - '         --resource Jenkins '
+            - '         --configsets jenkins_install '
+            - '         --region '
+            - !Ref 'AWS::Region'
+            - |+
+    CreationPolicy:
+      ResourceSignal:
+        Timeout: PT15M
+  LoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Condition: IsProduction
+    Properties:
+      Name: !Sub 'smartvault-${EnvId}-alb-jenkins'
+      Subnets:
+        - !ImportValue 
+          'Fn::Sub': 'smartvault-${AWS::Region}-subnet-privateapp1'
+        - !ImportValue 
+          'Fn::Sub': 'smartvault-${AWS::Region}-subnet-privateapp2'
+      Scheme: internal
+      SecurityGroups:
+        - !Ref JenkinsServerAccessSecurityGroup
+  Listener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Condition: IsProduction
+    Properties:
+      DefaultActions:
+      - Type: forward
+        TargetGroupArn: !Ref TargetGroup
+      LoadBalancerArn: !Ref LoadBalancer
+      Port: '80'
+      Protocol: HTTP
+  ListenerRule:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Condition: IsProduction
+    Properties:
+      Actions:
+      - Type: forward
+        TargetGroupArn: !Ref TargetGroup
+      Conditions:
+      - Field: path-pattern
+        Values:
+        - "/"
+      ListenerArn: !Ref Listener
+      Priority: 1
+  TargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Condition: IsProduction
+    Properties:
+      HealthCheckIntervalSeconds: 30
+      HealthCheckProtocol: HTTP
+      HealthCheckTimeoutSeconds: 10
+      HealthyThresholdCount: 4
+      Matcher:
+        HttpCode: '200'
+      Name: !Sub 'smartvault-${EnvId}-tgt-jenkins'
+      Port: 80
+      Protocol: HTTP
+      Targets:
+      - Id: !Ref Jenkins
+        Port: 80
+      UnhealthyThresholdCount: 3
+      VpcId: !ImportValue          
+        'Fn::Sub': 'smartvault-${AWS::Region}-vpc'
+  LoadBalancerCname:
+    Type: 'AWS::Route53::RecordSet'
+    Condition: IsProduction
+    Properties:
+      HostedZoneId: !ImportValue smartvault-route53-zoneid-internal
+      Name: !Sub
+        - 'jenkins.${domain}'
+        - {
+            domain : !FindInMap [!Ref "AWS::AccountId", 'all-regions' , Domain]
+          }
+      Type: CNAME
+      TTL: '60'
+      ResourceRecords:
+      - !GetAtt LoadBalancer.DNSName
+  JenkinsServerAccessSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Condition: IsProduction 
+    Properties:
+      GroupDescription: Public access
+      VpcId: !ImportValue          
+        'Fn::Sub': 'smartvault-${AWS::Region}-vpc'
+      SecurityGroupIngress:
+        - CidrIp: 0.0.0.0/0
+          IpProtocol: "tcp"
+          FromPort: 443
+          ToPort: 443
+        - CidrIp: 0.0.0.0/0
+          IpProtocol: "tcp"
+          FromPort: 80
+          ToPort: 80
+        - CidrIp: 0.0.0.0/0
+          IpProtocol: "tcp"
+          FromPort: 22
+          ToPort: 22
+        - CidrIp: 0.0.0.0/0
+          IpProtocol: "tcp"
+          FromPort: 8080
+          ToPort: 8080
+  JenkinsBackUpBucket:
+    Type: 'AWS::S3::Bucket'
+    Condition: IsProduction
+    Properties:
+      BucketName: !Sub '${BucketPrefix}-${AWS::AccountId}'
+      Tags:
+        - Key: Owner
+          Value: !Ref Owner
+        - Key: Name
+          Value: !Sub 'smartvault-s3-jenkins-${AWS::AccountId}'
+  JenkinsEC2Role:
+    Type: 'AWS::IAM::Role'
+    Condition: IsProduction
+    Properties:
+      RoleName: !Sub 'smartvault-${AWS::AccountId}-iam-role-jenkins'
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ec2.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      Path: /
+      Policies:
+        - PolicyName: JenkinsBucket
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action: 's3:*'
+                Resource: !GetAtt 
+                  - JenkinsBackUpBucket
+                  - Arn
+        - PolicyName: jenkins
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 's3:*'              # Temp
+                  - 'ecr:*'
+                  - 'ec2:*'
+                  - 'iam:*'
+                  - 'cloudformation:*'  # Temp
+                  - 'dynamodb:*'        # Temp
+                  - 'sts:AssumeRole'
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - 'iam:PassRole'
+                Resource: '*'
+        - PolicyName: stagingBucketAccess
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 's3:List*'
+                  - 's3:GetBucketLocation'
+                Resource:
+                  - !Sub 'arn:aws:s3:::smartvault-s3-access-${TrustingAccountId}'
+                  - !Sub 'arn:aws:s3:::smartvault-s3-access-${TrustingAccountId}/*'
+                  - arn:aws:s3:::smartvault-stg-terraform-states
+                  - arn:aws:s3:::smartvault-stg-terraform-states/*
+              - Effect: Allow
+                Action:
+                  - 's3:GetObject'
+                  - 's3:PutObject'
+                  - 's3:DeleteObject'
+                Resource:
+                  - !Sub 'arn:aws:s3:::smartvault-s3-access-${TrustingAccountId}/*'
+                  - !Sub 'arn:aws:s3:::smartvault-stg-terraform-states/*'
+  InstanceProfile:
+    Type: 'AWS::IAM::InstanceProfile'
+    Condition: IsProduction
+    Properties:
+      Path: /
+      Roles:
+        - !Ref JenkinsEC2Role
+      InstanceProfileName: !Sub 'smartvault-${AWS::AccountId}-iam-instanceprofile-jenkins'
+  JenkinsEc2CrossAccountRole:
+    Type: 'AWS::IAM::Role'
+    Condition: IsStaging
+    Properties:
+      RoleName: !Sub 'smartvault-delegated-iam-role-jenkins'
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: !Sub 'arn:aws:iam::587105464662:root'
+            Action:
+              - 'sts:AssumeRole'
+  JenkinsCrossAccountManagedPolicy:
+    Type: 'AWS::IAM::ManagedPolicy'
+    Condition: IsStaging
+    Properties:
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action: 's3:ListAllMyBuckets'
+            Resource: 'arn:aws:s3:::*'
+          - Effect: Allow
+            Action:
+              - 's3:List*'
+              - 's3:GetBucketLocation'
+            Resource:
+              - !Sub 'arn:aws:s3:::smartvault-s3-access-${TrustingAccountId}'
+              - !Sub 'arn:aws:s3:::smartvault-s3-access-${TrustingAccountId}/*'
+              - !Sub 'arn:aws:s3:::smartvault-${EnvId}-terraform-states'
+              - !Sub 'arn:aws:s3:::smartvault-${EnvId}-terraform-states/*'
+          - Effect: Allow
+            Action:
+              - 's3:GetObject'
+              - 's3:PutObject'
+              - 's3:DeleteObject'
+            Resource:
+              - !Sub 'arn:aws:s3:::smartvault-s3-access-${TrustingAccountId}/*'
+              - !Sub 'arn:aws:s3:::smartvault-${EnvId}-terraform-states/*'
+      Roles:
+        - !Ref JenkinsEc2CrossAccountRole
+Outputs: {}

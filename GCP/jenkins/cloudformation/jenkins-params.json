@@ -1,0 +1,38 @@
+[
+  {
+    "ParameterKey": "Owner",
+    "ParameterValue": "acheanyi.fomenky@smartvault.com"
+  },
+  {
+    "ParameterKey": "EnvId",
+    "ParameterValue": "prd"
+  },
+  {
+    "ParameterKey": "InstanceId",
+    "ParameterValue": "ami-02ccb28830b645a41"
+  },
+  {
+    "ParameterKey": "InstanceType",
+    "ParameterValue": "t3.small"
+  },
+  {
+    "ParameterKey": "KeyName",
+    "ParameterValue": "smartvault-production-us-east-2"
+  },
+  {
+    "ParameterKey": "BucketPrefix",
+    "ParameterValue": "smartvault-s3-jenkins"
+  },
+  {
+    "ParameterKey": "OpenVPNUser",
+    "ParameterValue": "acheanyi.fomenky"
+  },
+  {
+    "ParameterKey": "OpenVPNPassword",
+    "ParameterValue": "xxxxxxxxxxxx"
+  },
+  {
+    "ParameterKey": "TrustingAccountId",
+    "ParameterValue": "450560603497"
+  }
+]

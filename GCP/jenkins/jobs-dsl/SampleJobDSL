@@ -1,0 +1,17 @@
+job('crud-cfStack'){
+    scm{
+
+    }
+
+    triggers {
+
+    }
+
+    wrappers {
+
+    }
+
+    steps {
+        
+    }
+}

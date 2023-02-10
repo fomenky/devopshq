@@ -1,0 +1,107 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: Terraform remote state in S3 and locks in DynamoDB
+
+Parameters:
+  CostCentre:
+    Description: SmartVault code for AWS Cost Centre
+    Type: String
+  AppEnvironment:
+    Description: Application level environment name
+    Type: String
+    AllowedValues:
+      - Shared
+  InfraEnvironment:
+    Description: Infrastructure level environment name
+    Type: String
+    AllowedValues:
+      - Development
+      - Staging
+      - Production
+  Owner:
+    Description: GetBusy resource owner Owner details
+    Type: String
+    Default: devops@smartvault.com
+  Project:
+    Description: Name of the project being maintained
+    Type: String
+  ServiceNameLong:
+    Description: Full name of the service being maintained
+    Type: String
+  StateLockTableName:
+    Description: Name of the DynamoDB table to store state locks.
+    Type: String
+  StateStorageBucketName:
+    Description: Name of the S3 bucket to place the Terraform state files in.
+    Type: String
+
+Resources:
+  TerraformStateBucket:
+    Type: 'AWS::S3::Bucket'
+    Properties:
+      AccessControl: Private
+      BucketName: !Ref StateStorageBucketName
+      VersioningConfiguration:
+        Status: Enabled
+      Tags:
+        - Key: AppEnvironment
+          Value: !Ref AppEnvironment
+        - Key: CostCentre
+          Value: !Ref CostCentre
+        - Key: InfraEnvironment
+          Value: !Ref InfraEnvironment
+        - Key: Name
+          Value: !Ref StateStorageBucketName
+        - Key: Owner
+          Value: !Ref Owner
+        - Key: Project
+          Value: !Ref Project
+        - Key: ResourceType
+          Value: SimpleStorageService
+        - Key: Role
+          Value: Terraform remote state handling
+        - Key: Service
+          Value: !Ref ServiceNameLong
+
+  TerraformLockTable:
+    Type: 'AWS::DynamoDB::Table'
+    Properties:
+      AttributeDefinitions:
+        - AttributeName: LockID
+          AttributeType: S
+      KeySchema:
+        - AttributeName: LockID
+          KeyType: HASH
+      ProvisionedThroughput:
+        ReadCapacityUnits: 5
+        WriteCapacityUnits: 5
+      TableName: !Ref StateLockTableName
+      Tags:
+        - Key: AppEnvironment
+          Value: !Ref AppEnvironment
+        - Key: CostCentre
+          Value: !Ref CostCentre
+        - Key: InfraEnvironment
+          Value: !Ref InfraEnvironment
+        - Key: Name
+          Value: !Ref StateStorageBucketName
+        - Key: Owner
+          Value: !Ref Owner
+        - Key: Project
+          Value: !Ref Project
+        - Key: ResourceType
+          Value: DynamoDBTable
+        - Key: Role
+          Value: Terraform remote state handling
+        - Key: Service
+          Value: !Ref ServiceNameLong
+
+Outputs:
+  StackName:
+    Value: !Ref AWS::StackName
+  BucketName:
+    Value: !Ref StateStorageBucketName
+  TableName:
+    Value: !Ref StateLockTableName
+  AwsRegion:
+    Value: !Ref "AWS::Region"
+

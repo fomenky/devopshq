@@ -1,0 +1,109 @@
+#!/usr/bin/groovy
+
+pipeline {
+
+    agent any
+
+    options {
+        disableConcurrentBuilds()
+    }
+
+    stages {
+
+        stage("Create/Update Cloudformation Stacks - Staging"){
+            steps { 
+                manageStacks('stg', 'us-east-2')
+            }
+        }
+        stage("Approve"){
+            steps { approve() }
+        }
+        stage("Create/Update Cloudformation Stacks - Production"){
+            steps { 
+                manageStacks('prd', 'us-east-2')
+            }
+        }
+    }
+}
+
+// steps
+def manageStacks(envId, region) {
+
+    if ("${envId}" != 'stg' || "${envId}" != 'prd'){
+
+        // Validate, Create/Update cfStack
+        sh """#!/bin/bash
+        templates_dir=\$PWD/cloudformation/smartvault
+        for i in `ls -p \$templates_dir | grep -v / | cut -d '.' -f 1`; do
+        
+            stackname=smartvault-${envId}-\$i
+            template=file://\$templates_dir/\$i.yml
+            params=file://\$templates_dir/${envId}/\$i-params.json
+            
+            set +e;
+            validate_output=\$(aws cloudformation validate-template --template-body \$template --profile ${envId} --region ${region})
+            set -e;
+
+            echo -e "Validating templates..."
+            echo "\$validate_output"
+
+            if ! aws cloudformation describe-stacks --stack-name \$stackname --profile ${envId} --region ${region}; then
+                
+                echo -e "Stack does not exist, creating ..."
+                aws cloudformation create-stack \
+                    --template-body \$template \
+                    --profile ${envId} \
+                    --region ${region} \
+                    --stack-name \$stackname \
+                    --parameters \$params
+
+                echo "Waiting for stack to be created ..."
+                aws cloudformation wait stack-create-complete \
+                    --profile ${envId} \
+                    --region ${region}  \
+                    --stack-name \$stackname
+            else
+                echo -e "Stack exists, attempting update ..."
+
+                set +e
+                update_output=\$( aws cloudformation update-stack \
+                    --template-body \$template \
+                    --profile ${envId} \
+                    --region ${region} \
+                    --stack-name \$stackname \
+                    --parameters \$params  2>&1)
+                status=\$?
+                set -e
+
+                echo "\$update_output"
+
+                if [ \$status -ne 0 ] ; then
+
+                    # Don't fail for no-op update
+                    if [[ \$update_output == *"ValidationError"* && \$update_output == *"No updates"* ]]; then
+                        echo -e "Finished create/update - no updates to be performed"
+                        exit 0
+                    else
+                        exit \$status
+                    fi
+                fi
+                echo "Waiting for \$stackname stack update to complete ..."
+                aws cloudformation wait stack-update-complete \
+                    --profile ${envId} \
+                    --region ${region}  \
+                    --stack-name \$stackname
+            fi
+        done
+        echo "Finished. Create/update completed successfully!"
+        """
+    } else {
+        println "Environment ${envId} is not valid"
+        System.exit(0)
+    }
+}
+
+def approve() {
+	timeout(time:1, unit:'HOURS'){
+        input('Apply Cloudformation Stack Updates to Production?')
+    }
+}
