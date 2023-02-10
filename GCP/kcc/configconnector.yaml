@@ -1,0 +1,13 @@
+---
+#################################
+# MUST be run using:
+# kubectl apply -f configconnector 
+##################################
+
+apiVersion: core.cnrm.cloud.google.com/v1beta1
+kind: ConfigConnector
+metadata:
+  name: configconnector.core.cnrm.cloud.google.com
+spec:
+  googleServiceAccount: "cnrmsa@devops-376619.iam.gserviceaccount.com" 
+  mode: cluster
