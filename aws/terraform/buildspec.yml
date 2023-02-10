@@ -1,0 +1,25 @@
+#############################################
+# BUILDSPEC
+#############################################
+
+version: 0.2
+
+phases:
+
+  install:
+    commands:
+      - "apt install unzip -y"
+      - "wget https://releases.hashicorp.com/terraform/0.12.26/terraform_0.12.26_linux_amd64.zip"
+      - "unzip terraform_0.12.26_linux_amd64.zip"
+      - "mv terraform /usr/local/bin/"
+  pre_build:
+    commands:
+      - terraform init
+
+  build:
+    commands:
+      - terraform $TF_COMMAND -auto-approve -var-file="$MODULE_PATH/$env.tfvars.json" # Example MODULE_PATH: test/network
+
+  post_build:
+    commands:
+      - echo terraform $TF_COMMAND completed on `date`

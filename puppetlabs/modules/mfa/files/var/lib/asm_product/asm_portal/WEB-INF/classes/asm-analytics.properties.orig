@@ -1,0 +1,4 @@
+#Specify cron expression to schedule analytics sync time
+# Please refer to http://www.quartz-scheduler.org/documentation/quartz-2.x/tutorials/crontrigger.html for cron syntax
+analytics.sync.cron.expression=0 0/5 * * * ?
+analytics.sync.enable=true

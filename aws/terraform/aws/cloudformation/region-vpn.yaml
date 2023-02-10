@@ -1,0 +1,170 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Static Site-to-Site VPN Connection
+Parameters:
+  Owner:
+    Description: The key contact / stack holder of this stack.
+    Type: String
+    Default: fomenky@gmail.com
+  InternetGateway:
+    Description: The gateway attached to the default AWS VPC.
+    Type: String
+    Default: igw-5f219e39
+  VPC:
+    Description: Select VPC.
+    Type: AWS::EC2::VPC::Id
+  PublicRouteTable:
+    Description: Enter Public Route Table ID. (Skip if Not Including Public)
+    Type: String
+    Default: rtb-af13afd7
+  PrivateRouteTable:
+    Description: Enter Private Route Table ID.
+    Type: String
+    Default: rtb-0bb5880a613ea9b04
+  PublicNetworkAcl:
+    Description: Enter Public Network ACL ID. (Skip if Not Including Public)
+    Type: String
+    Default: acl-a83227d1
+  PrivateNetworkAcl:
+    Description: Enter Private Network ACL ID.
+    Type: String
+    Default: acl-0c6e35a61b66f0175
+  RemoteVpnDeviceIp:
+    Description: Enter External IP Address of the Customer VPN Device.
+    Type: String
+    MinLength: '7'
+    MaxLength: '12'
+    Default: 75.51.8.78
+    AllowedPattern: "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})"
+    ConstraintDescription: Must be a valid IP Address x.x.x.x
+  RemoteNetworkCidr:
+    Description: Enter Remote Network IP Range CIDR (i.e. 192.168.100.0/24).
+    Type: String
+    MinLength: '11'
+    MaxLength: '18'
+    Default: 192.168.55.0/24
+    AllowedPattern: "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})"
+    ConstraintDescription: Must be a valid CIDR range of the form x.x.x.x/x.
+  IncludePublicSubnets:
+    Description: Select whether to include the Public Subnets in VPN Access or not.
+    Type: String
+    Default: 'true'
+    AllowedValues:
+    - 'true'
+    - 'false'
+  AllowOfficeNetworktoPublicRuleNumber:
+    Description: Enter Public Network ACL Rule Number to Allow Office Network. (Skip
+      if Not Including Public)
+    Type: Number
+    Default: '230'
+  AllowOfficeNetworktoPrivateRuleNumber:
+    Description: Enter Private Network ACL Rule Number to Allow Office Network.
+    Type: Number
+    Default: '230'
+Conditions:
+  IncludePublic:
+    Fn::Equals:
+    - !Ref IncludePublicSubnets
+    - 'true'
+  ExcludePublic:
+    Fn::Equals:
+    - !Ref IncludePublicSubnets
+    - 'false'
+Resources:
+  VPNGateway:
+    Type: AWS::EC2::VPNGateway
+    Properties:
+      Type: ipsec.1
+      Tags:
+      - Key: Owner
+        Value: !Ref Owner
+  VPNGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref VPC
+      VpnGatewayId: !Ref VPNGateway
+  CustomerGateway:
+    Type: AWS::EC2::CustomerGateway
+    Properties:
+      Type: ipsec.1
+      BgpAsn: '65000'
+      IpAddress: !Ref RemoteVpnDeviceIp
+      Tags:
+      - Key: Owner
+        Value: !Ref Owner
+
+  VPNConnection:
+    Type: AWS::EC2::VPNConnection
+    DependsOn:
+    - CustomerGateway
+    - VPNGateway
+    Properties:
+      Type: ipsec.1
+      StaticRoutesOnly: 'true'
+      CustomerGatewayId: !Ref CustomerGateway
+      VpnGatewayId: !Ref VPNGateway
+      Tags:
+      - Key: Owner
+        Value: !Ref Owner
+  PublicRoute:
+    Condition: IncludePublic
+    DependsOn:
+    - VPNConnection
+    Type: AWS::EC2::Route
+    Properties:
+      DestinationCidrBlock: !Ref RemoteNetworkCidr
+      GatewayId: !Ref InternetGateway
+      RouteTableId: !Ref PublicRouteTable
+  PrivateRoute:
+    DependsOn:
+    - VPNConnection
+    Type: AWS::EC2::Route
+    Properties:
+      DestinationCidrBlock: !Ref RemoteNetworkCidr
+      GatewayId: !Ref VPNGateway
+      RouteTableId: !Ref PrivateRouteTable
+  InboundPublicNetworkAclEntryOfficeNetwork:
+    Condition: IncludePublic
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId: !Ref PublicNetworkAcl
+      RuleNumber: !Ref AllowOfficeNetworktoPublicRuleNumber
+      Protocol: "-1"
+      RuleAction: allow
+      Egress: 'false'
+      CidrBlock: !Ref RemoteNetworkCidr
+      PortRange:
+        From: '0'
+        To: '65535'
+  InboundPrivateNetworkAclEntryOfficeNetwork:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId: !Ref PrivateNetworkAcl
+      RuleNumber: !Ref AllowOfficeNetworktoPrivateRuleNumber
+      Protocol: "-1"
+      RuleAction: allow
+      Egress: 'false'
+      CidrBlock: !Ref RemoteNetworkCidr
+      PortRange:
+        From: '0'
+        To: '65535'
+Outputs:
+  VPC:
+    Description: VPC Used
+    Value: !Ref VPC
+  RemoteVpnDeviceIp:
+    Description: Remote VPN Device IP Used.
+    Value: !Ref RemoteVpnDeviceIp
+  RemoteNetworkCidr:
+    Description: Remote Network CIDR Used.
+    Value: !Ref RemoteNetworkCidr
+  IncludePublic:
+    Description: Include Public Subnets?
+    Value: !Ref IncludePublicSubnets
+  AllowOfficeToPublicRuleNumber:
+    Condition: IncludePublic
+    Description: Allow Office Network to Public Subnets Rule Number Used.
+    Value: !Ref AllowOfficeNetworktoPublicRuleNumber
+  AllowOfficeToPrivateRuleNumber:
+    Description: Allow Office Network to Private Subnets Rule Number Used.
+    Value: !Ref AllowOfficeNetworktoPrivateRuleNumber
+

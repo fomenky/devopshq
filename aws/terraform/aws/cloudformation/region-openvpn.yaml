@@ -1,0 +1,448 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: Common OpenVPN config
+Parameters:
+  Service:
+    Description: The service or product this stack supports
+    Type: String
+    AllowedValues:
+      - playground
+      - CompanyName
+  Owner:
+    Description: The key contact / stack holder of this stack
+    Type: String
+    Default: fomenky@gmail.com
+  InstanceType:
+    Description: OpenVPN Server Size
+    Type: String
+    Default: t2.micro
+    AllowedValues:
+      - t1.micro
+      - t2.micro
+      - t2.small
+      - t2.medium
+    ConstraintDescription: must be a valid EC2 instance type.
+  KeyName:
+    Description: The EC2 Key Pair to allow SSH access to the instances
+    Type: 'AWS::EC2::KeyPair::KeyName'
+    ConstraintDescription: must be the name of an existing EC2 KeyPair.
+  OpenvpnDynamodbAuthenticatorGemURL:
+    Description: >-
+      The Full URL location to download the Openvpn DynamoDB Authenticator
+      application. This url should result in downloading a .gem file for
+      installation
+    Type: String
+    Default: >-
+      https://github.com/adcreare/openvpn-dynamodb-authenticator/releases/download/0.0.2/openvpn-dynamodb-authenticator-0.0.2.gem
+  VpcIpBlock:
+    Description: VPC subnet block (of the format 10.x.0.0)
+    Type: String
+  VpcNetmask:
+    Description: VPC subnet mask (of the format 255.255.x.0)
+    Type: String
+    Default: 255.255.0.0
+  ClientIpBlock:
+    Description: Ip pool to be distributed to clients
+    Type: String
+    Default: 192.168.223.0
+  ClientNetmask:
+    Description: Subnet mask of ip pool
+    Type: String
+    Default: 255.255.255.0
+Mappings:
+  Region:
+    eu-west-1:
+      ami: ami-e1398992
+    eu-west-2:
+      ami: ami-ed100689
+    us-east-1:
+      ami: ami-1853ac65
+    us-east-2:
+      ami: ami-976152f2
+Resources:
+  dynamodbOpenVpn:
+    Type: 'AWS::DynamoDB::Table'
+    Properties:
+      AttributeDefinitions:
+        - AttributeName: Username
+          AttributeType: S
+      KeySchema:
+        - AttributeName: Username
+          KeyType: HASH
+      ProvisionedThroughput:
+        ReadCapacityUnits: 1
+        WriteCapacityUnits: 1
+      TableName: openvpn-access
+  policyOpenVpn:
+    Type: 'AWS::IAM::Policy'
+    Properties:
+      PolicyDocument:
+        Statement:
+          - Action:
+              - 'dynamodb:GetItem'
+            Effect: Allow
+            Resource: !Sub >-
+              arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${dynamodbOpenVpn}
+      PolicyName: !Sub 'DynamoDB-openvpn-access-${AWS::Region}'
+      Roles:
+        - !Sub '${Service}-iam-role-openvpn'
+  policyS3access:
+    Type: 'AWS::IAM::Policy'
+    Properties:
+      PolicyDocument:
+        Statement:
+          - Action:
+              - 's3:GetObject'
+              - 's3:ListBucket'
+              - 's3:PutObject'
+            Resource:
+              - !Sub 'arn:aws:s3:::${Service}-s3-access-${AWS::AccountId}'
+              - !Sub 'arn:aws:s3:::${Service}-s3-access-${AWS::AccountId}/*'
+            Effect: Allow
+      PolicyName: !Sub 'S3-openvpn-access-${AWS::Region}'
+      Roles:
+        - !Sub '${Service}-iam-role-openvpn'
+  eipOpenVpn:
+    Type: 'AWS::EC2::EIP'
+    Properties:
+      Domain: vpc
+  eipassociationOpenVpn:
+    Type: 'AWS::EC2::EIPAssociation'
+    Properties:
+      AllocationId: !GetAtt 
+        - eipOpenVpn
+        - AllocationId
+      InstanceId: !Ref instanceOpenVpn
+  instanceOpenVpn:
+    Type: 'AWS::EC2::Instance'
+    Metadata:
+      Comment: Setup OpenVPN Service
+      'AWS::CloudFormation::Authentication':
+        default:
+          type: s3
+          roleName: !Sub '${Service}-iam-role-openvpn'
+          buckets:
+            - !Sub '${Service}-s3-access-${AWS::AccountId}'
+      'AWS::CloudFormation::Init':
+        configSets:
+          bootstrap:
+            - install_cfn
+            - configure_openvpn
+            - finalise
+        install_cfn:
+          files:
+            /etc/cfn/cfn-hup.conf:
+              content: !Join 
+                - ''
+                - - |
+                    [main]
+                  - stack=
+                  - !Ref 'AWS::StackId'
+                  - |+
+
+                  - region=
+                  - !Ref 'AWS::Region'
+                  - |+
+
+              mode: '000400'
+              owner: root
+              group: root
+            /etc/cfn/hooks.d/cfn-auto-reloader.conf:
+              content: !Join 
+                - ''
+                - - |
+                    [cfn-auto-reloader-hook]
+                  - |
+                    triggers=post.update
+                  - |
+                    path=Resources.Server.Metadata.AWS::CloudFormation::Init
+                  - 'action=/opt/aws/bin/cfn-init -v '
+                  - '         --stack '
+                  - !Ref 'AWS::StackName'
+                  - '         --resource instanceOpenVpn '
+                  - '         --configsets bootstrap '
+                  - '         --region '
+                  - !Ref 'AWS::Region'
+                  - |+
+
+                  - |
+                    runas=root
+              mode: '000400'
+              owner: root
+              group: root
+          services:
+            sysvinit:
+              cfn-hup:
+                enabled: 'true'
+                ensureRunning: 'true'
+                files:
+                  - /etc/cfn/cfn-hup.conf
+                  - /etc/cfn/hooks.d/cfn-auto-reloader.conf
+        configure_openvpn:
+          files:
+            /tmp/setup.sh:
+              content: !Join 
+                - ''
+                - - |
+                    #!/bin/bash -xe
+                  - 'wget '
+                  - !Ref OpenvpnDynamodbAuthenticatorGemURL
+                  - |+
+
+                  - |
+                    gem install *.gem
+                  - echo 'sysctl -w net.ipv4.ip_forward=1' >> /etc/rc.local
+                  - |+
+
+                  - >-
+                    echo 'iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE'
+                    >> /etc/rc.local
+                  - |+
+
+                  - /bin/sh /etc/rc.local
+                  - |+
+
+                  - >-
+                    git clone https://github.com/OpenVPN/easy-rsa
+                    /tmp/easy-rsa  
+                  - |+
+
+                  - cp -r /tmp/easy-rsa/easyrsa3/* /etc/openvpn/easy-rsa
+                  - |+
+
+              mode: '000500'
+              owner: root
+              group: root
+            /etc/openvpn/easy-rsa/vars:
+              content: !Join 
+                - ''
+                - - export KEY_COUNTRY="GB"
+                  - |+
+
+                  - export KEY_PROVINCE="Cambridgeshire"
+                  - |+
+
+                  - export KEY_CITY="Sawston"
+                  - |+
+
+                  - export KEY_ORG="Reckon Software Ltd"
+                  - |+
+
+                  - export KEY_EMAIL="
+                  - !Ref Owner
+                  - '"'
+                  - |+
+
+                  - export KEY_CN=
+                  - !Sub '${Service}-ec2-openvpn-${AWS::Region}-${AWS::AccountId}'
+                  - |+
+
+                  - export KEY_NAME=
+                  - !Sub '${Service}-ec2-openvpn-${AWS::Region}-${AWS::AccountId}'
+                  - |+
+
+                  - export KEY_OU=IT
+                  - |+
+
+                  - export EASYRSA_REQ_CN=
+                  - !Sub '${Service}-ec2-openvpn-${AWS::Region}-${AWS::AccountId}'
+                  - |+
+
+                  - export EASYRSA_BATCH=yes
+                  - |+
+
+              mode: '000500'
+              owner: root
+              group: root
+            /tmp/keygen.sh:
+              content: !Join 
+                - ''
+                - - |
+                    #!/bin/bash -xe
+                  - ./easyrsa init-pki
+                  - |+
+
+                  - ./easyrsa build-ca nopass
+                  - |+
+
+                  - ./easyrsa gen-dh
+                  - |+
+
+                  - ./easyrsa build-server-full server nopass
+                  - |+
+
+                  - ./easyrsa build-client-full client nopass
+                  - |+
+
+                  - openvpn --genkey --secret ta.key
+                  - |+
+
+                  - >-
+                    cp ta.key pki/ca.crt pki/dh.pem pki/issued/server.crt
+                    pki/private/server.key /etc/openvpn 
+                  - |+
+
+                  - >-
+                    mkdir -p /etc/openvpn/client && cp ta.key pki/ca.crt
+                    pki/issued/client.crt pki/private/client.key
+                    /etc/openvpn/client 
+              mode: '000500'
+              owner: root
+              group: root
+            /etc/openvpn/tls-server.conf:
+              source: !Sub >-
+                https://s3-${AWS::Region}.amazonaws.com/${Service}-s3-access-${AWS::AccountId}/openvpn/configtemplates/servertemplate.conf
+              context:
+                ClientIpBlock: !Ref ClientIpBlock
+                ClientNetmask: !Ref ClientNetmask
+                VpcIpBlock: !Ref VpcIpBlock
+                VpcNetmask: !Ref VpcNetmask
+              mode: '000500'
+              owner: root
+              group: root
+            /etc/openvpn/client/client.ovpn:
+              source: !Sub >-
+                https://s3-${AWS::Region}.amazonaws.com/${Service}-s3-access-${AWS::AccountId}/openvpn/configtemplates/clienttemplate.conf
+              context:
+                OpenVpnEip: !Ref eipOpenVpn
+              mode: '000500'
+              owner: root
+              group: root
+          packages:
+            yum:
+              openvpn: []
+              git: []
+              ruby: []
+          commands:
+            01_setup_all:
+              command: /tmp/setup.sh
+              cwd: /tmp
+              ignoreErrors: 'true'
+            02_keygen:
+              command: /tmp/keygen.sh
+              cwd: /etc/openvpn/easy-rsa
+              ignoreErrors: 'false'
+            03_copy_client_keys_to_s3:
+              command: !Sub >-
+                aws s3 cp client
+                s3://${Service}-s3-access-${AWS::AccountId}/openvpn/${Service}-ec2-openvpn-${AWS::Region}-${AWS::AccountId}
+                --recursive --region ${AWS::Region}
+              cwd: /etc/openvpn
+              ignoreErrors: 'false'
+          services:
+            sysvinit:
+              openvpn:
+                enabled: 'true'
+                ensureRunning: 'true'
+                sources:
+                  - /etc/openvpn/
+        finalise:
+          commands:
+            1-signal-success:
+              command: !Join 
+                - ''
+                - - /opt/aws/bin/cfn-signal -e 0
+                  - ' --stack "'
+                  - !Ref 'AWS::StackName'
+                  - '"'
+                  - ' --resource instanceOpenVpn'
+                  - ' --region '
+                  - !Ref 'AWS::Region'
+              waitAfterCompletion: 0
+    Properties:
+      KeyName: !Ref KeyName
+      IamInstanceProfile: !Sub '${Service}-iam-instanceprofile-openvpn'
+      ImageId: !FindInMap 
+        - Region
+        - !Ref 'AWS::Region'
+        - ami
+      NetworkInterfaces:
+        - AssociatePublicIpAddress: 'true'
+          DeviceIndex: '0'
+          GroupSet:
+            - !Ref secgrpOpenVpn
+            - !Ref secgroupRemoteAdmin
+          SubnetId: !ImportValue 
+            'Fn::Sub': '${Service}-${AWS::Region}-subnet-public1'
+      InstanceType: !Ref InstanceType
+      UserData: !Base64 
+        'Fn::Join':
+          - ''
+          - - |
+              #!/bin/bash -xe
+            - |
+              yum update -y aws-cfn-bootstrap
+            - '/opt/aws/bin/cfn-init -v '
+            - '         --stack '
+            - !Ref 'AWS::StackName'
+            - '         --resource instanceOpenVpn '
+            - '         --configsets bootstrap '
+            - '         --region '
+            - !Ref 'AWS::Region'
+            - |+
+
+      Tags:
+        - Key: Name
+          Value: !Sub '${Service}-${AWS::Region}-ec2-openvpn'
+        - Key: Owner
+          Value: !Ref Owner
+    CreationPolicy:
+      ResourceSignal:
+        Timeout: PT15M
+  secgrpOpenVpn:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupName: !Sub '${Service}-secgrp-openvpn'
+      GroupDescription: Enable SSH and HTTPS access
+      VpcId: !ImportValue 
+        'Fn::Sub': '${Service}-${AWS::Region}-vpc'
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: '443'
+          ToPort: '443'
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: !Sub '${Service}-secgrp-openvpn'
+        - Key: Owner
+          Value: !Ref Owner
+  secgroupRemoteAdmin:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupName: !Sub '${Service}-secgrp-remoteadmin'
+      GroupDescription: RemoteAdmin
+      SecurityGroupIngress: []
+      Tags:
+        - Key: Name
+          Value: !Sub '${Service}-secgrp-remoteadmin'
+        - Key: Owner
+          Value: !Ref Owner
+      VpcId: !ImportValue 
+        'Fn::Sub': '${Service}-${AWS::Region}-vpc'
+  lambdaCreateShadowPassword:
+    Type: 'AWS::Lambda::Function'
+    Properties:
+      FunctionName: !Sub ${Service}-lambda-function-CreateShadowPassword
+      Description: !Sub >-
+        Function to shadow password used for OpenVpn user creation. Created in
+        stack ${AWS::StackName}
+      Handler: index.lambda_handler
+      Role: !Sub >-
+        arn:aws:iam::${AWS::AccountId}:role/${Service}-iam-role-basiclambdaexecution
+      Code:
+        ZipFile: |
+          import random
+          import string
+          import crypt
+          def lambda_handler(event, context):
+            password = event['password'];
+            randomsalt = ''.join(random.sample(string.ascii_letters,8));
+            encryptedPassword = crypt.crypt(password, '$6$%s$' % randomsalt );
+            return encryptedPassword;
+      Runtime: python2.7
+      Timeout: '30'
+Outputs:
+  secgroupRemoteAdmin:
+    Value: !Ref secgroupRemoteAdmin
+    Export:
+      Name: !Sub '${Service}-secgrp-remoteadmin'
+

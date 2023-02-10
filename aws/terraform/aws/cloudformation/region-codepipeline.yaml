@@ -1,0 +1,134 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: DevOps CI/CD pipeline to provision terraform resources
+Parameters:
+  Owner:
+    Description: The key contact / stack holder of this stack
+    Type: String
+    Default: fomenky@gmail.com
+  EnvId:
+    Description: The environment ID that this stack is being deployed for
+    Type: String
+    AllowedPattern: '[A-Za-z0-9]+'
+    MaxLength: 8
+  ExecuteCommand:
+    Description: The terraform command to be executed - apply or destroy
+    Type: String
+    Default: apply
+  ModulePath:
+    Description: The repo path to the specified terraform module to be deployed.
+    Type: String
+    Default: test/example
+  CodeBuildImage:
+    Description: AWS CodeBuild Image To Use
+    Type: String
+    Default: aws/codebuild/standard:1.0
+    AllowedValues:
+    - aws/codebuild/standard:1.0
+    - aws/codebuild/standard:2.0
+    - aws/codebuild/standard:3.0
+    - aws/codebuild/standard:4.0
+Resources:
+  artifactsBucket:
+    Type: 'AWS::S3::Bucket'
+    Properties:
+      BucketName: !Sub 'codepipeline-s3-artifacts-${AWS::AccountId}'
+      Tags:
+        - Key: Name
+          Value: !Sub 'codepipeline-s3-artifacts-${AWS::AccountId}'
+        - Key: Owner
+          Value: !Ref Owner
+      LifecycleConfiguration:
+        Rules:
+          - Id: DeleteItemsOlderThanThirtyOneDays
+            Prefix: ''
+            Status: Enabled
+            ExpirationInDays: '30'
+  CodePipeline:
+    Type: AWS::CodePipeline::Pipeline
+    DependsOn: artifactsBucket
+    Properties:
+      Name: !Sub terraform-${EnvId}-codepipeline
+      RestartExecutionOnUpdate: true
+      RoleArn: !GetAtt 'CodePipelineRole.Arn'
+      ArtifactStore:
+        Type: S3
+        Location: !Sub 'codepipeline-s3-artifacts-${AWS::AccountId}'
+      Stages: 
+        - Name: source
+          Actions:
+          - Name: Source
+            ActionTypeId:
+              Category: Source
+              Owner: AWS
+              Version: '1'
+              Provider: CodeStarSourceConnection
+            OutputArtifacts:
+            - Name: SourceArtifact
+            Configuration:
+              ConnectionArn: !Sub 'arn:aws:codestar-connections:${AWS::Region}:${AWS::AccountId}:connection/b7075157-ffde-42b5-9904-497f850edf41'
+              FullRepositoryId: 'fomenky/devopshq'
+              BranchName: 'master'
+            RunOrder: 1
+        - Name: build
+          Actions:
+          - Name: Build
+            InputArtifacts:
+            - Name: SourceArtifact
+            ActionTypeId:
+              Category: Build
+              Owner: AWS
+              Version: '1'
+              Provider: CodeBuild
+            OutputArtifacts:
+            - Name: BuildArtifact
+            Configuration:
+              ProjectName: !Ref CodeBuild
+            RunOrder: 2
+  CodeBuild:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Name: !Sub terraform-${EnvId}-codebuild
+      ServiceRole: !Ref CodeBuildRole
+      Artifacts:
+        Packaging: NONE
+        EncryptionDisabled: false
+        Type: CODEPIPELINE
+      Environment:
+        Type: LINUX_CONTAINER
+        ComputeType: BUILD_GENERAL1_SMALL
+        ImagePullCredentialsType: CODEBUILD
+        PrivilegedMode: true
+        Image: !Ref 'CodeBuildImage'
+        EnvironmentVariables:
+          - Name: TF_COMMAND
+            Value: !Ref ExecuteCommand
+          - Name: MODULE_PATH
+            Value: !Ref ModulePath
+          - Name: env
+            Value: !Ref EnvId
+      Source:
+        Type: CODEPIPELINE
+  CodePipelineRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          Effect: Allow
+          Principal:
+            Service: codepipeline.amazonaws.com
+          Action: sts:AssumeRole
+      ManagedPolicyArns:
+      - arn:aws:iam::aws:policy/AdministratorAccess
+  CodeBuildRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          Effect: Allow
+          Principal:
+            Service: codebuild.amazonaws.com
+          Action: sts:AssumeRole
+      ManagedPolicyArns:
+      - arn:aws:iam::aws:policy/AdministratorAccess

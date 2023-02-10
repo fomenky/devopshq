@@ -1,0 +1,25 @@
+---------------------------------------------------
+THANKS FOR RUNNING PUPPET ON THE MFA SERVER
+
+PLEASE RUN THE FF COMMANDS TO COMPLETE INSTALLATION:
+
+ln -s /var/lib/mysql/mysql.sock /data/mysql/mysql.sock
+mysql_secure_installation
+mysql -u root -p 
+    > source /root/asmdb-v2.1-Install.sql       [First ensure file exists]
+    > exit
+
+service tomcat6 restart
+
+
+TO COMPLETE SETUP VISIT THESE LINKS TO CONFIGURE
+Tropo SMS & VOICE:  
+    http://192.168.57.90:8080/asm_portal/login.ap
+    http://192.168.57.90:8080/asm_portal/analytics.ap
+    https://www.tropo.com/
+
+FINALLY, BACKUP aPersona settings and copy to mfa0002:
+mysqldump -u root -h 127.0.0.1 -p apersona email_service installation_tracker keyvault_license mobile_service_config process_run_details provider server  > /data/backups/apbackup_start_data_`date +%m-%d-%Y`.sql 
+mysqldump -u root -h 127.0.0.1 -p apersona  user --where="role_id = 1" > /data/backups/apbackup_admins_`date +%m-%d-%Y`.sql
+
+SEE: https://lindenhouse.atlassian.net/browse/SSO-545

@@ -1,0 +1,40 @@
+image: atlassian/default-image:2
+
+pipelines:
+  # By default (master branch) only validation is going to be triggered
+  default:
+    - step:
+        deployment: staging
+        name: Infra build and validate
+        script:
+          - export AWS_ACCESS_KEY_ID=$ACCOUNT2_AWS_ACCESS_KEY_ID
+          - export AWS_SECRET_ACCESS_KEY=$ACCOUNT2_AWS_SECRET_ACCESS_KEY
+          - mkdir -p ~/bin
+          - cd ~/bin
+          - export PATH="$PATH:/root/bin"
+          - wget https://releases.hashicorp.com/terraform/0.12.26/terraform_0.12.26_linux_amd64.zip
+          - unzip terraform_0.12.26_linux_amd64.zip
+          - cd ${BITBUCKET_CLONE_DIR}
+          - terraform version
+          - terraform init -get=true -upgrade -backend-config="backend.json"
+          - for i in $(find * -type d | grep /); do if [[ $i != *"aws"* && $i != *"global"* ]]; then terraform plan -input=true -var-file="$i/stg.tfvars.json" -out=tfplan; fi done;
+          #- terraform apply tfplan           # uncomment when ready to go live
+          #- terraform destroy -auto-approve  # uncomment to destroy all resources
+  branches:
+    # If a code is merged to branch development, it will execute below steps including terraform apply
+    development:
+      - step:
+          deployment: test
+          name: Infra launch
+          script:
+            - mkdir -p ~/bin
+            - cd ~/bin
+            - export PATH="$PATH:/root/bin"
+            - wget https://releases.hashicorp.com/terraform/0.12.26/terraform_0.12.26_linux_amd64.zip
+            - unzip terraform_0.12.26_linux_amd64.zip
+            - cd ${BITBUCKET_CLONE_DIR}
+            - terraform version
+            - terraform init
+            - for i in $(find * -type d | grep /); do if [[ $i != *"aws"* && $i != *"global"* ]]; then terraform plan -input=true -var-file="$i/stg.tfvars.json" -out=tfplan; fi done;
+            - terraform apply tfplan
+            #- terraform destroy -auto-approve # uncomment to destroy all resources

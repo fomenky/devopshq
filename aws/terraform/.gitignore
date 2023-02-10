@@ -1,0 +1,26 @@
+# Don't track content of these folders
+.terraform/
+
+# Compiled source #
+*.dll
+*.exe
+*.txt
+
+# Packages
+*.7z
+*.dmg
+*.gz
+*.iso
+*.jar
+*.rar
+*.tar
+*.zip
+
+# Variables File
+terraform.tfvars
+dev.tfvars
+stg.tfvars
+prd.tfvars
+*.tfstate
+*.tfstate.backup
+

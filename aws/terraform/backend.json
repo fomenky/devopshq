@@ -1,0 +1,7 @@
+{
+  "bucket": "smartvault-stg-terraform-states",
+  "key": "devops/terraform.tfstate",
+  "region": "us-east-2",
+  "encryption": true,
+  "dynamodb_table": "smartvault-stg-terraform-states"
+}

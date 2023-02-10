@@ -1,4 +1,12 @@
+apiVersion: core.cnrm.cloud.google.com/v1beta1
+kind: ConfigConnector
+metadata:
+  name: configconnector.core.cnrm.cloud.google.com
+spec:
+  googleServiceAccount: "cnrmsa@devops-376619.iam.gserviceaccount.com" 
+  mode: cluster
+---
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: sandbox1
+  name: gke-sandbox1

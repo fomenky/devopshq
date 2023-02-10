@@ -1,0 +1,1 @@
+Terraform module producing standatd AWS tags for supported resources.

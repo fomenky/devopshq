@@ -1,0 +1,37 @@
+#######################
+# Properties for apersona asm
+#######################
+
+SMTP_IGNORE_SSL_CERT=true
+#INTERNAL_NETWORK_MODE=true
+
+# Cron expression for DB pinger
+asm.db.pinger.cron.expression=0 0/5 * * * ?
+
+asm.country.ipalloc.sync.enabled=true
+# This expression: "0 0 1 * * ?" on the following line, tells ASM to pull the Global Country IP Data once per day.
+# Do not edit this parameter. Changing of this parameter is for testing only.
+asm.country.ipalloc.sync.cron.expression=0 0 1 * * ?
+
+asm.country.ipalloc.sync.url=http://apdataproxy1.apersona.com:8090/asm_data/getLatestCountryIpAlloc.asm?appId=asm-local
+asm.country.ipalloc.sync.retain.batches=2
+
+asm.bad.ip.sync.enabled=true
+# This expression: "0 0/15 * * * ?" on the following line, tells ASM to pull the Threat Actor Bad IP List every 15 minutes.
+# Do not edit this parameter. Changing of this parameter is for testing only.
+asm.bad.ip.sync.cron.expression=0 0/15 * * * ?
+asm.bad.ip.sync.url=http://apdataproxy1.apersona.com:8090/asm_data/getLatestBadIpList.asm?appId=asm-local
+asm.bad.ip.sync.retain.batches=2
+
+# Only one asm server should be performing data rention purge. Multiple servers attempting to purge could cause database locks on high transaction volume.
+# It is recommended to set the purge at once per day or at most twice per day. But in no event should be less than15 minutes.
+asm.data.retention.purge.enabled=true
+# Thre record below purges one time per day.
+asm.data.retention.purge.cron.expression=0 0 1 * * ?
+
+# The record below purges every 15 minutes.
+#asm.data.retention.purge.cron.expression=0 0/15 * * * ?
+#asm.data.retention.purge.cron.expression=0 0/5 * * * ?
+#asm.data.retention.purge.cron.expression=0 0/1 * * * ?
+#asm.data.retention.purge.cron.expression=0 0 2 * * ?
+
