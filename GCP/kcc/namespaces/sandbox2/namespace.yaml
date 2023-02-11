@@ -2,4 +2,4 @@
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: gke-sandbox2-ns
+  name: sandbox2
