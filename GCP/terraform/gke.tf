@@ -97,11 +97,11 @@ resource "google_gke_hub_feature_membership" "feature_member" {
       }
     }
   }
-  # policy_controller {
-  #   enabled                    = true
-  #   template_library_installed = true
-  #   referential_rules_enabled  = true
-  # }
+  policy_controller {
+    enabled                    = true
+    template_library_installed = true
+    referential_rules_enabled  = true
+  }
 }
 
 # create a GCP service account that will be used to make changes to K8s resources and bind it to Kubernetes Service Account #

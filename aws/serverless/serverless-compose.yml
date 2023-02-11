@@ -1,0 +1,34 @@
+state:
+  backend: s3
+
+services:
+
+  ###############
+  ## Functions ##
+  ###############
+
+  ## For testing purposes ##
+  # mickmaq-tests:
+  #   path: Tests
+  #   params:
+  #     customVar: 'Test'
+
+  ###############
+  ## Resources ##
+  ###############
+
+  # mickmaq-api:
+  #   path: Resources/api
+
+  ## Uncomment to create certs (CDN Certs MUST be created in us-east-1 region)
+  # mickmaq-certs:
+  #   path: Resources/certificates
+
+  mickmaq-cloudfront:
+    path: Resources/cloudfront
+
+  mickmaq-cognito:
+    path: Resources/cognito
+
+  mickmaq-database:
+    path: Resources/database

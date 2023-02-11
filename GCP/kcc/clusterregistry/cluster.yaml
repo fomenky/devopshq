@@ -1,0 +1,6 @@
+ind: Cluster
+apiVersion: clusterregistry.k8s.io/v1alpha1
+metadata:
+  name: config-sync-cluster
+  labels:
+    environment: development

@@ -1,0 +1,41 @@
+image: node:16.4.2-alpine
+
+definitions:
+  steps:
+    - step: &scan-secrets
+        name: Secret Scanning
+        script:
+          - pipe: atlassian/git-secrets-scan:0.6.1
+    - step: &build-deploy
+        name: Build & Deploy to Dev/Test
+        deployment: Test
+        caches:
+          - node
+        script:
+          - apk add python3
+          - npm install
+          - npm install -g serverless
+          - npm install -g serverless-compose
+          - serverless config credentials --provider aws --key ${AWS_ACCESS_KEY_ID} --secret ${AWS_SECRET_ACCESS_KEY} 
+          - serverless deploy --stage $ENV
+          # - serverless remove --stage $ENV  #irreversible - UNCOMMENT WITH CAUTION
+
+pipelines:
+  branches:
+    dev:
+      - step: *scan-secrets
+      - step: *build-deploy
+    staging:
+      # - step: *scan-secrets
+      - step:
+          <<: *build-deploy
+          name: Build & Deploy to Stage/UAT
+          deployment: Staging
+          # trigger: 'manual'
+    master:
+      - step: *scan-secrets
+      - step:
+          <<: *build-deploy
+          name: Build & Deploy to Prod
+          deployment: Production
+          trigger: 'manual'
