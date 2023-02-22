@@ -1,0 +1,128 @@
+
+service: mickmaq
+
+custom:
+  tableName: 'item-${self:provider.stage}'
+  splitStacks: 
+      perFunction: false
+      perType: true
+
+    
+plugins:
+  - serverless-dotenv-plugin
+  - serverless-offline
+  - serverless-plugin-split-stacks
+  
+
+provider:
+  name: aws
+  stage: dev
+  runtime: nodejs16.x
+  versionFunctions: false  ## Disabling Lambda Versioning
+  Parameters:
+    NameTable:
+      Description: Name of table
+      type: String
+
+  environment:
+    region: us-east-1
+    user_pool_id: {Ref: CognitoMickMaqUserPool}
+    client_id: {Ref: CognitoUserPoolClient}
+    identityPoolId: {Ref: CognitoIdentityPool}
+    state_machine_arn: {Ref: StepFunctionsStateMachine}
+    state_activity_arn: {Ref: StepFunctionsActivity}
+    driver_state_machine_arn: {Ref: DriverStepFunctionsStateMachine}
+    driver_state_activity_arn: {Ref: DriverStepFunctionsActivity}
+    admin_email: 'info@mickmaq.com'
+    item_CDN: !GetAtt 'ItemPublicDistribution.DomainName'
+    category_CDN: !GetAtt 'CategoryPublicDistribution.DomainName'
+    pinpoint_application_id: {Ref: Pinpointapplication}
+    item_images_bucket_name: {Ref: S3Bucket}
+    category_images_bucket_name: {Ref: S3Bucket2}
+    collection_images_bucket: {Ref: CollectionBucket}
+    seller_verification_document_bucket: {Ref: S3Bucket3}
+    driver_verification_document_bucket: {Ref: driverVerificationDocuments}
+    area_table_name: {Ref: DynamodbAreaTable}
+    cart_table: {Ref: DynamoDBCartTable}
+    collection_table: {Ref: DynamoCollectionTable}
+    country_city_table: {Ref: DynamodbCityTable}
+    country_table: {Ref: DynamoCountryTable}
+    delivery_requests_table: {Ref: DynamoDBDeliveryequestTable} 
+    item_sequence_table: {Ref: DynamoDBItemSequenceTable}
+    item_table: {Ref: DynamoDBItemTable}
+    order_sequence_table: {Ref: DynamoDBOrderSequenceTable}
+    orders_table: {Ref: DynamoDBOrderTable}
+    payment_methods_table: {Ref: DynamoDBPaymentTable}
+    product_category_table: {Ref: DynamoDBProductCategoryTable}
+    product_main_category_table: {Ref: DynamoDBProductMainCategoryTable}
+    transactions_table: {Ref: DynamoDBTransactionTable}
+    user_addresses_table: {Ref: DynamoDBAddressTable}
+    whishlist_table: {Ref: DynamoWishlistTable}
+    driver_dashboard_table: {Ref: DynamodbDriverDashboardTable}
+    wallet_step_machine_arn: {Ref: WalletStateMachine}
+    seller_dashbaord_table: {Ref: DynamodbSellerDashboardTable}
+    recently_sold_items_table: {Ref: DynamodbRecentlySoldItemTable}
+    seller_transaction_table: {Ref: DynamodbSellerTransactionTable}
+    driver_transaction_table: {Ref: DynamodbDriverTransactionTable}
+    
+
+  iamRoleStatements:
+    - Effect: Allow
+      Action:
+        - cognito-idp:AdminInitiateAuth
+        - cognito-idp:AdminCreateUser
+        - cognito-idp:AdminGetUser
+        - cognito-idp:adminDeleteUser
+        - cognito-idp:AdminSetUserPassword
+        - cognito-idp:AdminUpdateUserAttributes
+        - dynamodb:DescribeTable
+        - dynamodb:Query
+        - dynamodb:Scan
+        - dynamodb:GetItem
+        - dynamodb:BatchGetItem
+        - dynamodb:PutItem
+        - dynamodb:UpdateItem
+        - dynamodb:DeleteItem
+        - lambda:InvokeFunction
+        - lambda:InvokeAsync
+        - states:GetActivityTask
+        - s3:*
+        - s3:PutObject
+        - s3:GetObjectAcl
+        - s3:GetObject
+        - s3:GetObjectTagging
+        - s3:PutObjectTagging
+        - s3:PutObjectAcl
+        - ses:SendRawEmail
+        - kms:ListKeys
+        - kms:ListAliases
+        - kms:ListGrants
+        - kms:GetKeyPolicy
+        - kms:ListRetirableGrants
+        - kms:ListKeyPolicies
+        - kms:DescribeKey
+        - kms:GetKeyRotationStatus
+        - kms:Encrypt
+        - kms:DescribeCustomKeyStores
+        - kms:GetParametersForImport
+        - kms:ListResourceTags
+        - kms:GetPublicKey
+        - kms:Decrypt
+        - mobiletargeting:SendOTPMessage
+        - mobiletargeting:VerifyOTPMessage
+        - states:StartExecution
+        - states:StartExecution
+      Resource: "*"
+      
+
+functions:
+
+
+  testFile:
+    disableLogs: false
+    handler: testfile.handler
+    events:
+      - http:
+          path: test
+          method: post
+          cors: true
