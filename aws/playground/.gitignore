@@ -18,3 +18,4 @@ multiarch/Dockerfile-*
 *.tfstate*
 **/.terraform
 *.tfplan
+.terraform/*
