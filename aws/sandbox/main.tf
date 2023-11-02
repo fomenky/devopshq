@@ -25,6 +25,5 @@ source  = "./k8s/eks"
   cluster_version = "1.27"
   
   subnets  = [module.network.public_subnet_one, module.network.private_subnet_one]
-  nodegroup_subnet = [module.network.public_subnet_one, module.network.private_subnet_one]
-  nodegroup_data  = var.nodegroup_data
+
 }
