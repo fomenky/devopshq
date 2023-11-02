@@ -5,7 +5,7 @@
 module "vpc_tags" {
   source = "../../global/tags"
   
-  name = "terraform-playground"
+  name = "sandbox"
 }
 
 ## VPC
@@ -22,7 +22,7 @@ resource "aws_internet_gateway" "default" {
     tags = merge(
         module.vpc_tags.tags,
         {
-          Name = "playground-ibs-d-ue1-default-igw"
+          Name = "sandbox-ibs-d-ue1-default-igw"
         }
       )
 }
@@ -36,7 +36,7 @@ resource "aws_subnet" "public-subnet" {
     tags = merge(
         module.vpc_tags.tags,
         {
-          Name = "playground-ibs-d-ue1-public-subnet"
+          Name = "sandbox-ibs-d-ue1-public-subnet"
         }
       )
 }
@@ -49,7 +49,7 @@ resource "aws_subnet" "private-subnet" {
     tags = merge(
         module.vpc_tags.tags,
         {
-          Name = "playground-ibs-d-ue1-private-subnet"
+          Name = "sandbox-ibs-d-ue1-private-subnet"
         }
       )
 
@@ -67,7 +67,7 @@ resource "aws_route_table" "public-rt" {
     tags = merge(
         module.vpc_tags.tags,
         {
-          Name = "playground-ibs-d-ue1-public-rt"
+          Name = "sandbox-ibs-d-ue1-public-rt"
         }
       )
 }

@@ -17,3 +17,18 @@ variable "tags" {
 variable "subnets" {
   type  = list(string)
 }
+
+variable "nodegroup_subnet" {
+  type  = list(string)
+}
+
+variable "nodegroup_data" {
+  type  = map(object({
+    name = string
+    scaling_config = list(object({
+      desired   = number
+      max       = number
+      min       = number
+    }))
+  }))
+}

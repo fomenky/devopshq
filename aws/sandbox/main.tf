@@ -1,5 +1,6 @@
 locals {
-  cluster_name = "terraform-playground-eks-${random_string.suffix.result}"
+  cluster_name = "sandbox-eks-${random_string.suffix.result}"
+  nodegroup_name = "sandbox-eks-nodegroup-${random_string.suffix.result}"
 }
 
 module "network" {
@@ -24,4 +25,6 @@ source  = "./k8s/eks"
   cluster_version = "1.27"
   
   subnets  = [module.network.public_subnet_one, module.network.private_subnet_one]
+  nodegroup_subnet = [module.network.public_subnet_one, module.network.private_subnet_one]
+  nodegroup_data  = var.nodegroup_data
 }
