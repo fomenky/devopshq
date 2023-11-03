@@ -8,6 +8,10 @@ data "aws_iam_role" "eks_iam_role" {
   name = "AWSServiceRoleForAmazonEKS"
 }
 
+data "aws_iam_role" "eks_iam_role_ng" {
+  name = "role-sandbox-ec2-service-role"
+}
+
 data "aws_iam_policy_document" "assume_role" {
   statement {
     effect = "Allow"
@@ -39,12 +43,12 @@ resource "aws_eks_cluster" "this" {
 }
 
 
-resource "aws_eks_node_group" "eks_nodegroup" {
+resource "aws_eks_node_group" "this" {
   count           = length(var.subnets)
   
   cluster_name    = var.cluster_name
   node_group_name = "nodegroup-${count.index}"
-  node_role_arn   = data.aws_iam_role.eks_iam_role.arn
+  node_role_arn   = data.aws_iam_role.eks_iam_role_ng.arn
   subnet_ids      = ["${tolist(var.subnets)[count.index]}"]
 
   scaling_config {
