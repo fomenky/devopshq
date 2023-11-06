@@ -14,9 +14,9 @@ variable "tags" {
   default = {}
 }
 
-variable "subnets" {
-  type  = list(string)
-}
+# variable "subnets" {
+#   type  = list(string)
+# }
 
 # variable "nodegroup_subnet" {
 #   type  = list(string)

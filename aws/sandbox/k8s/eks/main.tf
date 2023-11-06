@@ -4,6 +4,20 @@ module "eks_tags" {
   name = "terraform-playground-eks"
 }
 
+data "aws_subnet" "public-subnet-a" {
+  filter {
+    name   = "tag:Name"
+    values = ["sbn-ibs-d-ue1-public-a"]
+  }
+}
+
+data "aws_subnet" "public-subnet-b" {
+  filter {
+    name   = "tag:Name"
+    values = ["sbn-ibs-d-ue1-public-b"]
+  }
+}
+
 data "aws_iam_role" "eks_iam_role" {
   name = "AWSServiceRoleForAmazonEKS"
 }
@@ -31,7 +45,8 @@ resource "aws_eks_cluster" "this" {
   role_arn = data.aws_iam_role.eks_iam_role.arn
 
   vpc_config {
-    subnet_ids = var.subnets
+    # subnet_ids = var.subnets
+    subnet_ids = [data.aws_subnet.public-subnet-a.id, data.aws_subnet.public-subnet-b.id]
   }
   
   tags = merge(
@@ -44,13 +59,17 @@ resource "aws_eks_cluster" "this" {
 
 
 resource "aws_eks_node_group" "this" {
-  count           = length(var.subnets)
+  # count           = length(var.subnets)
   
   cluster_name    = var.cluster_name
-  node_group_name = "nodegroup-${count.index}"
+  # node_group_name = "nodegroup-${count.index}"
+  node_group_name = "nodegroup-1"
   node_role_arn   = data.aws_iam_role.eks_iam_role_ng.arn
-  subnet_ids      = ["${tolist(var.subnets)[count.index]}"]
+  # subnet_ids      = ["${tolist(var.subnets)[count.index]}"]
+  subnet_ids      = [data.aws_subnet.public-subnet-a.id]
 
+  instance_types  = ["t3.small"]
+  
   scaling_config {
     desired_size = 1
     max_size     = 2
