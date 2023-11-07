@@ -15,7 +15,7 @@ multiarch/Dockerfile-*
 **/.credentials
 **/reports/*
 *.msi
-*.tfstate*
+; *.tfstate*
 **/.terraform
 *.tfplan
 **.tfvars
