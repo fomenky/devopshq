@@ -77,8 +77,8 @@ resource "aws_eks_cluster" "this" {
   role_arn = data.aws_iam_role.eks_iam_role.arn
 
   vpc_config {
-    endpoint_private_access = true
-    endpoint_public_access  = true
+    # endpoint_private_access = true
+    endpoint_public_access  = true  # Temporary: Set to true for testing purpose
     # subnet_ids = var.subnets
     subnet_ids = [data.aws_subnet.public-subnet-a.id, data.aws_subnet.public-subnet-b.id]
   }
@@ -125,28 +125,28 @@ resource "aws_eks_node_group" "this" {
 }
 
 
-resource "kubernetes_cluster_role_binding" "this" {
-  metadata {
-    name = "cluster_role_binding_test"
-  }
-  role_ref {
-    api_group = "rbac.authorization.k8s.io"
-    kind      = "ClusterRole"
-    name      = "cluster-admin"
-  }
-  subject {
-    kind      = "User"
-    name      = "admin"
-    api_group = "rbac.authorization.k8s.io"
-  }
-  subject {
-    kind      = "ServiceAccount"
-    name      = "default"
-    namespace = "kube-system"
-  }
-  subject {
-    kind      = "Group"
-    name      = "system:masters"
-    api_group = "rbac.authorization.k8s.io"
-  }
-}
+# resource "kubernetes_cluster_role_binding" "this" {
+#   metadata {
+#     name = "cluster_role_binding_test"
+#   }
+#   role_ref {
+#     api_group = "rbac.authorization.k8s.io"
+#     kind      = "ClusterRole"
+#     name      = "cluster-admin"
+#   }
+#   subject {
+#     kind      = "User"
+#     name      = "admin"
+#     api_group = "rbac.authorization.k8s.io"
+#   }
+#   subject {
+#     kind      = "ServiceAccount"
+#     name      = "default"
+#     namespace = "kube-system"
+#   }
+#   subject {
+#     kind      = "Group"
+#     name      = "system:masters"
+#     api_group = "rbac.authorization.k8s.io"
+#   }
+# }
