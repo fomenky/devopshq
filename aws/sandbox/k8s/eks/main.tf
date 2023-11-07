@@ -50,9 +50,9 @@ data "aws_subnet" "public-subnet-b" {
   }
 }
 
-# data "aws_iam_role" "eks_iam_role" {
-#   name = "AWSServiceRoleForAmazonEKS"
-# }
+data "aws_iam_role" "eks_iam_role" {
+  name = "AWSServiceRoleForAmazonEKS"
+}
 
 data "aws_iam_role" "eks_iam_role_ng" {
   name = "role-sandbox-ec2-service-role"
@@ -74,7 +74,7 @@ data "aws_iam_policy_document" "assume_role" {
 resource "aws_eks_cluster" "this" {
   name     = var.cluster_name
   version  = var.cluster_version
-  role_arn = data.aws_iam_role.eks_iam_role_ng.arn
+  role_arn = data.aws_iam_role.eks_iam_role.arn
 
   vpc_config {
     # subnet_ids = var.subnets
