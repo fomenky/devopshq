@@ -3,6 +3,12 @@ locals {
   nodegroup_name = "sandbox-eks-nodegroup-${random_string.suffix.result}"
 }
 
+resource "random_string" "suffix" {
+  length  = 8
+  special = false
+}
+
+## VPC/Subnet/Networking Module - Not Needed as this will be provided by CCOE ##
 # module "network" {
 #   source = "./infra/network"
 
@@ -13,11 +19,7 @@ locals {
 
 # }
 
-resource "random_string" "suffix" {
-  length  = 8
-  special = false
-}
-
+## k8s Module ##
 module "eks" {
 source  = "./k8s/eks"
 
@@ -27,3 +29,8 @@ source  = "./k8s/eks"
   # subnets  = [module.network.public_subnet_one, module.network.private_subnet_one]
 
 }
+
+# ## Helm Packages Module ##
+# module "helm" {
+#   source  = "./k8s/packages/helm"
+# }

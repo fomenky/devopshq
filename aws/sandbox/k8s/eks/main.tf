@@ -18,22 +18,58 @@ provider "helm" {
       command     = "aws"
     }
   }
+  # registry {
+  #   url      = "oci://${data.aws_caller_identity.current.account_id}.dkr.ecr.us-east-1.amazonaws.com"
+  #   username = data.aws_ecr_authorization_token.token.user_name
+  #   password = data.aws_ecr_authorization_token.token.password
+  # }
 }
-
-# resource "helm_release" "nginx" {
-#   name       = "nginx"
-#   repository = "https://charts.bitnami.com/bitnami"
-#   chart      = "nginx"
-
-#   values = [
-#     file("${path.module}/nginx-values.yaml")
-#   ]
-# }
 
 module "eks_tags" {
   source = "../../global/tags"
   
   name = "terraform-playground-eks"
+}
+
+## ECR Module ##
+module "ecr" {
+  source = "terraform-aws-modules/ecr/aws"
+
+  repository_name = "helloworld-chart"
+  repository_type = "private"
+
+  repository_lifecycle_policy = jsonencode({
+    rules = [
+      {
+        rulePriority = 1,
+        description  = "Keep last 3 images",
+        selection = {
+          tagStatus     = "tagged",
+          tagPrefixList = ["v"],
+          countType     = "imageCountMoreThan",
+          countNumber   = 3
+        },
+        action = {
+          type = "expire"
+        }
+      }
+    ]
+  })
+
+  repository_force_delete = true
+
+  tags = merge(
+      module.eks_tags.tags,
+      {
+        Name = "sandbox-ecr"
+      }
+    )
+}
+data "aws_caller_identity" "current" {}
+
+data "aws_ecr_authorization_token" "token" {
+  registry_id = data.aws_caller_identity.current.account_id
+  depends_on = [module.ecr]
 }
 
 data "aws_subnet" "public-subnet-a" {
@@ -51,7 +87,7 @@ data "aws_subnet" "public-subnet-b" {
 }
 
 data "aws_iam_role" "eks_iam_role" {
-  name = "AWSServiceRoleForAmazonEKS"
+  name = "role-sandbox-ec2-service-role"
 }
 
 data "aws_iam_role" "eks_iam_role_ng" {
@@ -91,7 +127,6 @@ resource "aws_eks_cluster" "this" {
       )
 }
 
-
 resource "aws_eks_node_group" "this" {
   # count           = length(var.subnets)
   
@@ -124,29 +159,14 @@ resource "aws_eks_node_group" "this" {
   depends_on = [aws_eks_cluster.this]
 }
 
+## Helm Packages ##
+resource "helm_release" "helloworld" {
+  name       = "helloworld-chart"
+  repository = "oci://${data.aws_caller_identity.current.account_id}.dkr.ecr.us-east-1.amazonaws.com"
+  chart      = "helloworld-chart"
+  values = [
+    file("${path.module}/values.yaml")
+  ]
 
-# resource "kubernetes_cluster_role_binding" "this" {
-#   metadata {
-#     name = "cluster_role_binding_test"
-#   }
-#   role_ref {
-#     api_group = "rbac.authorization.k8s.io"
-#     kind      = "ClusterRole"
-#     name      = "cluster-admin"
-#   }
-#   subject {
-#     kind      = "User"
-#     name      = "admin"
-#     api_group = "rbac.authorization.k8s.io"
-#   }
-#   subject {
-#     kind      = "ServiceAccount"
-#     name      = "default"
-#     namespace = "kube-system"
-#   }
-#   subject {
-#     kind      = "Group"
-#     name      = "system:masters"
-#     api_group = "rbac.authorization.k8s.io"
-#   }
-# }
+  version = "0.1.3"
+}
