@@ -164,9 +164,14 @@ resource "helm_release" "helloworld" {
   name       = "helloworld-chart"
   repository = "oci://${data.aws_caller_identity.current.account_id}.dkr.ecr.us-east-1.amazonaws.com"
   chart      = "helloworld-chart"
+  version    = "0.1.0"
+
   values = [
     file("${path.module}/values.yaml")
   ]
 
-  version = "0.1.3"
+  set {
+    name  = "image.tag"
+    value = "0.0.1"
+  }
 }
